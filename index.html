@@ -1,0 +1,1342 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>2.5ドット絵ビルダー</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/exporters/STLExporter.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/exporters/PLYExporter.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/exporters/OBJExporter.js"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        :root {
+            --primary-color: #2563eb;
+            --primary-hover: #1d4ed8;
+            --danger-color: #ef4444;
+            --danger-hover: #dc2626;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: flex-start;
+            min-height: 100vh;
+            margin: 0;
+            background-color: #f0f4f8;
+            color: #333;
+            padding: 1rem 0;
+        }
+        .game-title {
+            font-size: 2rem;
+            font-weight: bold;
+            color: #1e3a8a;
+            margin-bottom: 0.5rem;
+        }
+        .instructions {
+            font-size: 0.9em;
+            color: #4b5563;
+            margin-bottom: 1rem;
+            text-align: center;
+            max-width: 600px;
+        }
+        .main-container {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            align-items: flex-start;
+            gap: 1.5rem;
+            width: 100%;
+            max-width: 1600px;
+            margin: 0 auto;
+            padding: 0 1rem;
+        }
+        .canvas-container {
+            position: relative;
+            width: 800px;
+            height: 800px;
+            max-width: 100%;
+            border: 1px solid #cbd5e1;
+            background-color: #e0e0e0;
+            border-radius: 8px;
+            transition: width 0.3s, height 0.3s;
+        }
+        #game-canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+            border-radius: 8px;
+        }
+        .controls-wrapper {
+            background-color: #ffffff;
+            padding: 1rem;
+            border-radius: 12px;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.1);
+            width: 100%;
+            max-width: 380px;
+            height: 800px;
+            display: flex;
+            flex-direction: column;
+        }
+        .tab-buttons {
+            display: flex;
+            border-bottom: 2px solid #e5e7eb;
+            margin-bottom: 1rem;
+        }
+        .tab-button {
+            padding: 0.75rem 1rem;
+            border: none;
+            background: none;
+            cursor: pointer;
+            font-size: 0.9rem;
+            font-weight: 600;
+            color: #6b7280;
+            border-bottom: 3px solid transparent;
+            transition: all 0.2s ease;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        .tab-button:hover {
+            color: var(--primary-color);
+        }
+        .tab-button.active {
+            color: var(--primary-color);
+            border-bottom-color: var(--primary-color);
+        }
+        .tab-content {
+            display: none;
+            height: calc(100% - 45px - 1rem); /* Full height minus tab buttons */
+            overflow-y: auto;
+            padding-right: 0.5rem; /* For scrollbar */
+        }
+        .tab-content.active {
+            display: block;
+        }
+        /* Custom Scrollbar */
+        .tab-content::-webkit-scrollbar { width: 6px; }
+        .tab-content::-webkit-scrollbar-track { background: #f1f1f1; border-radius: 3px;}
+        .tab-content::-webkit-scrollbar-thumb { background: #ccc; border-radius: 3px;}
+        .tab-content::-webkit-scrollbar-thumb:hover { background: #aaa; }
+
+
+        .control-section {
+            padding-bottom: 1rem;
+            margin-bottom: 1rem;
+        }
+        .control-section:not(:last-child) {
+            border-bottom: 1px solid #e5e7eb;
+        }
+        .section-title {
+            font-size: 1rem;
+            font-weight: 600;
+            color: #374151;
+            margin-bottom: 0.75rem;
+        }
+
+        .action-button, .tool-button {
+            color: white;
+            padding: 0.6rem 1rem;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 0.9rem;
+            font-weight: 500;
+            transition: all 0.2s ease;
+            width: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+            background-color: var(--primary-color);
+        }
+        .action-button:hover:not(:disabled) {
+            background-color: var(--primary-hover);
+        }
+        .action-button.danger { background-color: var(--danger-color); }
+        .action-button.danger:hover:not(:disabled) { background-color: var(--danger-hover); }
+        
+        .action-button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .tool-button {
+            background-color: #f3f4f6;
+            color: #4b5563;
+            border: 2px solid #e5e7eb;
+        }
+        .tool-button.active, .tool-button:hover {
+            background-color: #dbeafe;
+            color: #1e40af;
+            border-color: #93c5fd;
+        }
+
+        /* Palette Styles */
+        .palette {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(50px, 1fr));
+            gap: 8px;
+        }
+        .palette-button {
+            width: 100%;
+            padding-bottom: 100%;
+            position: relative;
+            border: 2px solid transparent;
+            border-radius: 8px;
+            cursor: grab;
+            transition: all 0.2s ease;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .palette-button:active {
+            cursor: grabbing;
+        }
+        .palette-button.selected {
+            border-color: var(--primary-color);
+            transform: scale(1.1);
+            box-shadow: 0 4px 12px rgba(59, 130, 246, 0.5);
+        }
+        .palette-button.dragging {
+            opacity: 0.4;
+        }
+        .palette-button.drag-over {
+            border-style: dashed;
+            border-color: var(--primary-color);
+        }
+        .palette-name-input {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            text-align: center; background-color: rgba(255, 255, 255, 0.9); color: #333;
+            font-size: 10px; font-weight: bold; border: 2px solid var(--primary-color);
+            border-radius: 6px; box-sizing: border-box; outline: none;
+        }
+        .palette-button-inner {
+            position: absolute; top: 0; left: 0; right: 0; bottom: 0; display: flex; align-items: center; justify-content: center;
+            font-size: 10px; color: white; text-shadow: 0 0 2px rgba(0,0,0,0.5); pointer-events: none;
+        }
+
+        /* Input Styles */
+        .styled-input {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #cbd5e1;
+            border-radius: 6px;
+        }
+        .color-picker-wrapper {
+            position: relative;
+            width: 48px;
+            height: 48px;
+        }
+        #custom-color-swatch {
+            width: 100%;
+            height: 100%;
+            border: 1px solid #ccc;
+            border-radius: 8px;
+            transition: all 0.2s ease;
+            cursor: pointer;
+        }
+        #custom-color-picker {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer;
+        }
+
+        /* Anchor Grid */
+        .anchor-grid-button.selected {
+            background-color: var(--primary-color);
+            color: white;
+            border-color: var(--primary-hover);
+        }
+
+        /* Custom Modal */
+        #modal-overlay, #export-modal-overlay {
+            position: fixed;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            background-color: rgba(0, 0, 0, 0.5);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+        }
+        #modal-box, #export-modal-box {
+            background: white;
+            padding: 2rem;
+            border-radius: 12px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+            width: 90%;
+            max-width: 400px;
+            text-align: center;
+        }
+        #modal-message {
+            margin-bottom: 1.5rem;
+            font-size: 1.1rem;
+            color: #333;
+        }
+        #modal-buttons {
+            display: flex;
+            justify-content: center;
+            gap: 1rem;
+        }
+    </style>
+</head>
+<body>
+    <h1 class="game-title">2.5ドット絵ビルダー</h1>
+    <p class="instructions">左クリックでブロックを配置/段を積み、右クリックで段を減らします。<br>同じ色で左クリックを続けるとブロックが積み上がり(最大5段)、6回目で1段目に戻ります。</p>
+
+    <div class="main-container">
+        <div class="text-center">
+            <h2 class="text-lg font-bold mb-2">キャンバス</h2>
+            <div id="game-canvas-container" class="canvas-container">
+                <canvas id="game-canvas"></canvas>
+            </div>
+        </div>
+        
+        <div class="controls-wrapper">
+             <div class="tab-buttons">
+                <button class="tab-button active" data-tab="draw-tab"><i data-lucide="paintbrush"></i>描画</button>
+                <button class="tab-button" data-tab="settings-tab"><i data-lucide="sliders-horizontal"></i>設定</button>
+                <button class="tab-button" data-tab="file-tab"><i data-lucide="folder"></i>ファイル</button>
+            </div>
+
+            <!-- Draw Tab -->
+            <div id="draw-tab" class="tab-content active">
+                <div class="control-section">
+                    <h3 class="section-title">描画ツール</h3>
+                    <div class="grid grid-cols-3 gap-2">
+                         <button id="tool-pen" class="tool-button active" data-tool="pen"><i data-lucide="pen-tool"></i>ペン</button>
+                         <button id="tool-bucket" class="tool-button" data-tool="bucket"><i data-lucide="paint-bucket"></i>バケツ</button>
+                         <button id="tool-eyedropper" class="tool-button" data-tool="eyedropper"><i data-lucide="eyedropper"></i>スポイト</button>
+                    </div>
+                </div>
+
+                <div class="control-section">
+                    <h3 class="section-title">カスタムカラー</h3>
+                    <div class="flex items-center gap-4">
+                        <div class="color-picker-wrapper">
+                             <div id="custom-color-swatch" class="custom-color-swatch"></div>
+                             <input type="color" id="custom-color-picker" value="#ff0000">
+                        </div>
+                        <div class="flex-grow flex flex-col gap-2">
+                             <button id="add-update-palette-button" class="action-button text-sm"><i data-lucide="plus"></i>パレットに追加/更新</button>
+                             <button id="delete-color-button" class="action-button danger text-sm"><i data-lucide="trash-2"></i>選択色を削除</button>
+                        </div>
+                    </div>
+                </div>
+                <div class="control-section">
+                    <div class="flex justify-between items-center mb-2">
+                        <h3 class="section-title">カラーパレット</h3>
+                        <button id="reset-palette-button" class="text-xs text-gray-500 hover:text-red-500 font-semibold" title="カスタムカラーをすべて削除">リセット</button>
+                    </div>
+                    <div class="palette" id="palette-container"></div>
+                </div>
+                 <div class="control-section">
+                    <h3 class="section-title">キャンバス操作</h3>
+                    <div class="grid grid-cols-2 gap-2">
+                        <button id="undo-button" class="action-button"><i data-lucide="undo-2"></i>元に戻す</button>
+                        <button id="redo-button" class="action-button"><i data-lucide="redo-2"></i>やり直す</button>
+                        <button id="reset-button" class="action-button danger col-span-2"><i data-lucide="rotate-ccw"></i>キャンバスをクリア</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Settings Tab -->
+            <div id="settings-tab" class="tab-content">
+                 <div class="control-section">
+                    <h3 class="section-title">グリッド設定</h3>
+                    <div class="grid grid-cols-2 gap-2 mb-4">
+                        <div>
+                            <label for="grid-width-input" class="text-sm">グリッド幅</label>
+                            <input type="number" id="grid-width-input" class="styled-input" value="10" min="1" max="100">
+                        </div>
+                        <div>
+                            <label for="grid-height-input" class="text-sm">グリッド高さ</label>
+                             <input type="number" id="grid-height-input" class="styled-input" value="10" min="1" max="100">
+                        </div>
+                    </div>
+                    <h4 class="text-sm font-semibold text-gray-700 mt-3 mb-1 text-left">拡大・縮小の基準位置</h4>
+                     <div id="anchor-grid" class="grid grid-cols-3 gap-1 mb-4">
+                        <div class="anchor-grid-button border p-2 text-center cursor-pointer" data-anchor="top-left">↖</div>
+                        <div class="anchor-grid-button border p-2 text-center cursor-pointer" data-anchor="top-center">↑</div>
+                        <div class="anchor-grid-button border p-2 text-center cursor-pointer" data-anchor="top-right">↗</div>
+                        <div class="anchor-grid-button border p-2 text-center cursor-pointer" data-anchor="middle-left">←</div>
+                        <div class="anchor-grid-button border p-2 text-center cursor-pointer selected" data-anchor="middle-center">●</div>
+                        <div class="anchor-grid-button border p-2 text-center cursor-pointer" data-anchor="middle-right">→</div>
+                        <div class="anchor-grid-button border p-2 text-center cursor-pointer" data-anchor="bottom-left">↙</div>
+                        <div class="anchor-grid-button border p-2 text-center cursor-pointer" data-anchor="bottom-center">↓</div>
+                        <div class="anchor-grid-button border p-2 text-center cursor-pointer" data-anchor="bottom-right">↘</div>
+                    </div>
+                     <button id="update-grid-button" class="action-button"><i data-lucide="check-square"></i>設定を更新</button>
+                </div>
+                <div class="control-section">
+                    <h3 class="section-title">表示設定</h3>
+                    <div class="space-y-3">
+                         <div class="flex items-center justify-between">
+                            <label for="background-color-picker" class="text-sm">背景色</label>
+                            <input type="color" id="background-color-picker" value="#f0f4f8">
+                         </div>
+                         <label class="flex items-center"><input type="checkbox" id="toggle-2d-mode" class="rounded h-4 w-4 mr-2 accent-blue-500"><span class="text-sm">2Dモード</span></label>
+                         <label class="flex items-center"><input type="checkbox" id="toggle-game-grid-lines" class="rounded h-4 w-4 mr-2 accent-blue-500" checked><span class="text-sm">グリッド線を表示</span></label>
+                         <label id="stack-count-label" class="flex items-center"><input type="checkbox" id="toggle-stack-count" class="rounded h-4 w-4 mr-2 accent-blue-500" checked><span class="text-sm">段数を表示</span></label>
+                         <label id="rotation-lock-label" class="flex items-center"><input type="checkbox" id="toggle-rotation-lock" class="rounded h-4 w-4 mr-2 accent-blue-500"><span class="text-sm">回転をロック</span></label>
+                         <button id="top-view-button" class="action-button"><i data-lucide="arrow-down-to-dot"></i>真上から見る</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- File Tab -->
+            <div id="file-tab" class="tab-content">
+                <div class="control-section">
+                    <h3 class="section-title">キャンバスデータ</h3>
+                    <div class="grid grid-cols-2 gap-2">
+                         <button id="save-button" class="action-button"><i data-lucide="save"></i>保存 (.json)</button>
+                         <label for="load-input" class="action-button cursor-pointer"><i data-lucide="upload"></i>読込 (.json)</label>
+                         <input type="file" id="load-input" class="hidden" accept=".json">
+                    </div>
+                </div>
+                <div class="control-section">
+                    <h3 class="section-title">エクスポート</h3>
+                     <button id="export-button" class="action-button"><i data-lucide="download"></i>エクスポート</button>
+                </div>
+                 <div class="control-section">
+                    <h3 class="section-title">キャンバスサイズ</h3>
+                    <div class="grid grid-cols-2 gap-2 mb-4">
+                        <div>
+                            <label for="canvas-width-input" class="text-sm">幅 (px)</label>
+                            <input type="number" id="canvas-width-input" class="styled-input" value="800" min="200">
+                        </div>
+                        <div>
+                            <label for="canvas-height-input" class="text-sm">高さ (px)</label>
+                             <input type="number" id="canvas-height-input" class="styled-input" value="800" min="200">
+                        </div>
+                    </div>
+                    <button id="update-canvas-size-button" class="action-button"><i data-lucide="check-square"></i>サイズを更新</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Custom Modal -->
+    <div id="modal-overlay">
+        <div id="modal-box">
+            <p id="modal-message"></p>
+            <div id="modal-buttons">
+                <button id="modal-confirm" class="action-button">はい</button>
+                <button id="modal-cancel" class="action-button danger">いいえ</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Export Modal -->
+    <div id="export-modal-overlay">
+        <div id="export-modal-box">
+            <h3 class="text-lg font-bold mb-4 text-gray-800">エクスポート形式を選択</h3>
+            <div class="grid grid-cols-1 gap-3">
+                <button id="export-png-modal-button" class="action-button"><i data-lucide="image"></i>PNGで保存</button>
+                <button id="export-stl-modal-button" class="action-button"><i data-lucide="file-box"></i>STLで保存</button>
+                <button id="export-ply-modal-button" class="action-button"><i data-lucide="palette"></i>PLYで保存 (色付き)</button>
+                <button id="export-obj-modal-button" class="action-button"><i data-lucide="file-output"></i>OBJで保存 (色付き)</button>
+            </div>
+            <button id="export-modal-cancel" class="action-button danger mt-4">キャンセル</button>
+        </div>
+    </div>
+
+    <script>
+        // --- Game Configuration ---
+        let gridWidth = 10;
+        let gridHeight = 10;
+        const CELL_SIZE = 0.5; // 1マスを5mm x 5mmに設定 (旧: 1)
+        const MAX_STACK_LEVEL = 5;
+        const STACK_LEVEL_HEIGHT = 0.1;
+        
+        const defaultBlockTypes = [
+            { id: 0, name: '空', color: 0xe5e7eb }, { id: 1, name: '緑', color: 0x34d399 }, { id: 2, name: '黄', color: 0xfbbf24 }, { id: 3, name: '青', color: 0x60a5fa }, { id: 4, name: '赤', color: 0xef4444 }, { id: 5, name: '紫', color: 0xa855f7 }, { id: 6, name: '桃', color: 0xec4899 }, { id: 7, name: '橙', color: 0xf97316 }, { id: 8, name: '黄緑', color: 0x84cc16 }, { id: 9, name: '空色', color: 0x0ea5e9 }, { id: 10, name: '藍', color: 0x4f46e5 }, { id: 11, name: '茶', color: 0x78350f }, { id: 12, name: '白', color: 0xf9fafb }, { id: 13, name: '灰', color: 0x6b7280 }, { id: 14, name: '濃灰', color: 0x374151 }, { id: 15, name: '黒', color: 0x000000 }, { id: 16, name: '水色', color: 0x22d3ee },
+        ];
+        let blockTypes = JSON.parse(JSON.stringify(defaultBlockTypes));
+        
+        const CUSTOM_COLOR_ID_START = 17;
+        const CUSTOM_PICKER_ID = 99;
+
+        // --- Global State ---
+        let history = [];
+        let historyIndex = -1;
+        let selectedColorInfo = { type: 'palette', id: 1, color: blockTypes[1].color };
+        let selectedAnchor = 'middle-center';
+        let is2DMode = false;
+        let currentTool = 'pen'; // 'pen', 'bucket', 'eyedropper'
+        let currentGridState;
+        let draggedElement = null; // For palette drag-and-drop
+
+        // --- 3D Scene Variables ---
+        let gameScene, gameCamera, gameRenderer, gameControls, gameGroup, gameGridHelper, numberGroup, ambientLight, directionalLight;
+        let raycaster, mouse;
+
+        // --- DOM Elements ---
+        const gameCanvasContainer = document.getElementById('game-canvas-container');
+        const gameCanvas = document.getElementById('game-canvas');
+        // ... (all other DOM element getters) ...
+
+        // --- Initialization ---
+        function init() {
+            lucide.createIcons(); // Initialize Lucide icons
+            loadBlockTypes();
+            setupPalette();
+            initializeGameGrid();
+            setupEventListeners();
+            animate();
+        }
+        
+        function loadBlockTypes() {
+            const savedBlockTypes = localStorage.getItem('customBlockTypes');
+            if (savedBlockTypes) {
+                blockTypes = JSON.parse(savedBlockTypes);
+            }
+        }
+
+        function initializeGameGrid() {
+             history = [];
+             historyIndex = -1;
+             currentGridState = Array(gridHeight).fill(null).map(() => 
+                Array(gridWidth).fill(null).map(() => ({ color: 0x000000, stackLevel: 0 }))
+            );
+            
+            const defaultColorType = blockTypes.find(b => b.id === 1) || blockTypes[0];
+            selectedColorInfo = { type: 'palette', id: defaultColorType.id, color: defaultColorType.color };
+
+            if (!gameScene) { // First time setup
+                [gameScene, gameCamera, gameRenderer, gameControls] = setupThreeJSBase(gameCanvas, gameCanvasContainer);
+                gameScene.background = new THREE.Color(document.getElementById('background-color-picker').value);
+                raycaster = new THREE.Raycaster();
+                mouse = new THREE.Vector2();
+                gameCanvas.addEventListener('pointerdown', onGameCanvasClick, false);
+                gameCanvas.addEventListener('contextmenu', (e) => e.preventDefault(), false);
+            }
+            
+            rebuildScene();
+            saveState();
+        }
+        
+        function getElementById(id) {
+            return document.getElementById(id);
+        }
+
+        function setupThreeJSBase(canvasElement, containerElement) {
+            const scene = new THREE.Scene();
+            const width = containerElement.clientWidth;
+            const height = containerElement.clientHeight;
+            const camera = new THREE.PerspectiveCamera(50, width / height, 0.1, 1000);
+            camera.position.set(12, 15, 18);
+            camera.lookAt(0, 0, 0);
+
+            // 背景を透過するために alpha: true を追加
+            const renderer = new THREE.WebGLRenderer({ canvas: canvasElement, antialias: true, preserveDrawingBuffer: true, alpha: true });
+            renderer.setSize(width, height);
+            renderer.setPixelRatio(window.devicePixelRatio);
+            
+            ambientLight = new THREE.AmbientLight(0xffffff, 0.7);
+            scene.add(ambientLight);
+            directionalLight = new THREE.DirectionalLight(0xffffff, 0.9);
+            directionalLight.position.set(5, 10, 7.5);
+            scene.add(directionalLight);
+            
+            const controls = new THREE.OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true;
+            controls.dampingFactor = 0.05;
+            
+            window.addEventListener('resize', () => {
+                const newWidth = containerElement.clientWidth;
+                const newHeight = containerElement.clientHeight;
+                if(gameCamera && gameRenderer){
+                    gameCamera.aspect = newWidth / newHeight;
+                    gameCamera.updateProjectionMatrix();
+                    renderer.setSize(newWidth, newHeight);
+                }
+            }, false);
+
+            return [scene, camera, renderer, controls];
+        }
+        
+        function rebuildScene() {
+            if (gameGroup) gameScene.remove(gameGroup);
+            gameGroup = new THREE.Group();
+            gameScene.add(gameGroup);
+            
+            if(numberGroup) gameScene.remove(numberGroup);
+            numberGroup = new THREE.Group();
+            gameScene.add(numberGroup);
+
+            if (gameGridHelper) gameScene.remove(gameGridHelper);
+            gameGridHelper = createRectangularGridHelper(gridWidth, gridHeight);
+            gameScene.add(gameGridHelper);
+             
+            gameGridHelper.visible = getElementById('toggle-game-grid-lines').checked;
+            numberGroup.visible = getElementById('toggle-stack-count').checked;
+            render3DGrid(currentGridState, gameGroup, numberGroup); 
+
+            updatePaletteSelection();
+        }
+
+        function render3DGrid(gridData, blockGroup, numGroup) {
+            clearGroup(blockGroup); 
+            clearGroup(numGroup);
+            const gridHalfW = ((gridWidth - 1) * CELL_SIZE) / 2;
+            const gridHalfH = ((gridHeight - 1) * CELL_SIZE) / 2;
+            for (let r = 0; r < gridHeight; r++) {
+                for (let c = 0; c < gridWidth; c++) {
+                    const cellState = gridData[r][c];
+                    if (cellState.stackLevel === 0) continue; 
+                    const actualBlockHeight = is2DMode ? 0.01 : cellState.stackLevel * STACK_LEVEL_HEIGHT;
+                    const geometry = new THREE.BoxGeometry(CELL_SIZE, actualBlockHeight, CELL_SIZE);
+                    const material = is2DMode ? new THREE.MeshBasicMaterial({ color: cellState.color }) : new THREE.MeshStandardMaterial({ color: cellState.color, roughness: 0.6, metalness: 0.2 });
+                    const cube = new THREE.Mesh(geometry, material);
+                    cube.position.set(c * CELL_SIZE - gridHalfW, actualBlockHeight / 2, r * CELL_SIZE - gridHalfH);
+                    cube.userData = { row: r, col: c, isBlock: true };
+                    blockGroup.add(cube);
+                    if (!is2DMode && cellState.stackLevel > 0) {
+                        const numberSprite = createNumberSprite(cellState.stackLevel.toString());
+                        numberSprite.position.copy(cube.position);
+                        numberSprite.position.y += actualBlockHeight / 2 + 0.1;
+                        numGroup.add(numberSprite);
+                    }
+                }
+            }
+        }
+        
+        // --- Event Listeners Setup ---
+        function setupEventListeners() {
+            // Tab switching
+            document.querySelectorAll('.tab-button').forEach(button => {
+                button.addEventListener('click', () => {
+                    document.querySelectorAll('.tab-button').forEach(btn => btn.classList.remove('active'));
+                    button.classList.add('active');
+                    document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
+                    document.getElementById(button.dataset.tab).classList.add('active');
+                });
+            });
+
+            // Tool selection
+            document.querySelectorAll('.tool-button').forEach(button => {
+                button.addEventListener('click', () => {
+                    document.querySelectorAll('.tool-button').forEach(btn => btn.classList.remove('active'));
+                    button.classList.add('active');
+                    currentTool = button.dataset.tool;
+                    gameCanvas.style.cursor = currentTool === 'eyedropper' ? 'crosshair' : 'default';
+                });
+            });
+
+            // Palette
+            getElementById('custom-color-picker').addEventListener('input', handleCustomColorChange, false);
+            getElementById('custom-color-swatch').addEventListener('click', handleCustomColorSwatchClick, false);
+            getElementById('add-update-palette-button').addEventListener('click', addOrUpdateCustomColor);
+            getElementById('delete-color-button').addEventListener('click', deleteSelectedCustomColor);
+            getElementById('reset-palette-button').addEventListener('click', async () => {
+                if (await showConfirmationModal('カスタムカラーがすべて削除され、パレットが初期状態に戻ります。よろしいですか？')) {
+                    localStorage.removeItem('customBlockTypes');
+                    blockTypes = JSON.parse(JSON.stringify(defaultBlockTypes));
+                    setupPalette();
+                    handlePaletteClick(1);
+                }
+            });
+
+            // Settings
+            getElementById('update-grid-button').addEventListener('click', updateGridSettings);
+            getElementById('anchor-grid').addEventListener('click', (e) => {
+                if(e.target.classList.contains('anchor-grid-button')) {
+                    document.querySelectorAll('.anchor-grid-button').forEach(btn => btn.classList.remove('selected'));
+                    e.target.classList.add('selected');
+                    selectedAnchor = e.target.dataset.anchor;
+                }
+            });
+            getElementById('background-color-picker').addEventListener('input', (e) => {
+                if (gameScene) gameScene.background = new THREE.Color(e.target.value);
+            });
+            getElementById('toggle-2d-mode').addEventListener('change', toggle2DMode);
+            getElementById('toggle-game-grid-lines').addEventListener('change', (e) => { if (gameGridHelper) gameGridHelper.visible = e.target.checked; });
+            getElementById('toggle-stack-count').addEventListener('change', (e) => { if (numberGroup) numberGroup.visible = e.target.checked; });
+            getElementById('toggle-rotation-lock').addEventListener('change', (e) => { if (gameControls) gameControls.enableRotate = !e.target.checked; });
+            getElementById('top-view-button').addEventListener('click', setTopView);
+
+            // Canvas Actions
+            getElementById('reset-button').addEventListener('click', async () => {
+                if (await showConfirmationModal('キャンバス上のすべてのブロックをクリアします。よろしいですか？')) {
+                    currentGridState = Array(gridHeight).fill(null).map(() => Array(gridWidth).fill(null).map(() => ({ color: 0x000000, stackLevel: 0 })));
+                    render3DGrid(currentGridState, gameGroup, numberGroup);
+                    saveState();
+                }
+            });
+            getElementById('undo-button').addEventListener('click', undo);
+            getElementById('redo-button').addEventListener('click', redo);
+
+            // File Actions
+            getElementById('save-button').addEventListener('click', saveCanvasState);
+            getElementById('load-input').addEventListener('change', loadCanvasState);
+            getElementById('update-canvas-size-button').addEventListener('click', updateCanvasSize);
+
+            // Export Actions
+            const exportModalOverlay = getElementById('export-modal-overlay');
+            getElementById('export-button').addEventListener('click', () => {
+                exportModalOverlay.style.display = 'flex';
+            });
+            getElementById('export-modal-cancel').addEventListener('click', () => {
+                exportModalOverlay.style.display = 'none';
+            });
+            exportModalOverlay.addEventListener('click', (e) => {
+                if(e.target === exportModalOverlay) {
+                    exportModalOverlay.style.display = 'none';
+                }
+            });
+
+            getElementById('export-png-modal-button').addEventListener('click', () => {
+                exportAsPNG();
+                exportModalOverlay.style.display = 'none';
+            });
+             getElementById('export-stl-modal-button').addEventListener('click', () => {
+                exportAsSTL();
+                exportModalOverlay.style.display = 'none';
+            });
+            getElementById('export-ply-modal-button').addEventListener('click', () => {
+                exportAsPLY();
+                exportModalOverlay.style.display = 'none';
+            });
+             getElementById('export-obj-modal-button').addEventListener('click', () => {
+                exportAsOBJ();
+                exportModalOverlay.style.display = 'none';
+            });
+        }
+
+        // --- Core Click Logic ---
+        function onGameCanvasClick(event) {
+            // Middle mouse button for panning should always work
+            if (event.button === 1) {
+                return; 
+            }
+
+            // Prevent context menu on right-click to allow using it for an action
+            event.preventDefault();
+
+            const canvasBounds = gameCanvas.getBoundingClientRect();
+            mouse.x = ((event.clientX - canvasBounds.left) / canvasBounds.width) * 2 - 1;
+            mouse.y = -((event.clientY - canvasBounds.top) / canvasBounds.height) * 2 + 1;
+
+            raycaster.setFromCamera(mouse, gameCamera);
+            const intersects = raycaster.intersectObjects(gameGroup.children, true); 
+
+            const gridHalfW = ((gridWidth - 1) * CELL_SIZE) / 2;
+            const gridHalfH = ((gridHeight - 1) * CELL_SIZE) / 2;
+
+            if (intersects.length > 0 && intersects[0].object.userData.isBlock) {
+                const { row, col } = intersects[0].object.userData;
+                handleCellInteraction(row, col, event.button);
+            } else { 
+                const groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0); 
+                const intersectionPoint = new THREE.Vector3();
+                if (raycaster.ray.intersectPlane(groundPlane, intersectionPoint)) {
+                    const col = Math.round((intersectionPoint.x + gridHalfW) / CELL_SIZE);
+                    const row = Math.round((intersectionPoint.z + gridHalfH) / CELL_SIZE);
+                    if (col >= 0 && col < gridWidth && row >= 0 && row < gridHeight) {
+                        handleCellInteraction(row, col, event.button);
+                    }
+                }
+            }
+        }
+
+        function handleCellInteraction(row, col, clickType) {
+            switch (currentTool) {
+                case 'pen':
+                    handlePenTool(row, col, clickType);
+                    break;
+                case 'bucket':
+                     if (clickType === 0) handleBucketTool(row, col);
+                    break;
+                case 'eyedropper':
+                     if (clickType === 0) handleEyedropperTool(row, col);
+                    break;
+            }
+        }
+        
+        function handlePenTool(row, col, clickType) {
+            const cell = currentGridState[row][col];
+            const originalStackLevel = cell.stackLevel;
+            const originalColor = cell.color;
+            
+            if (clickType === 2) { // Right click: DECREASE stack
+                if (cell.stackLevel > 0) {
+                    cell.stackLevel--;
+                }
+            } else if (clickType === 0) { // Left click: INCREASE stack/place
+                if (cell.stackLevel === 0) {
+                    cell.color = selectedColorInfo.color;
+                    cell.stackLevel = 1;
+                } else {
+                    if (selectedColorInfo.color !== cell.color) {
+                        cell.color = selectedColorInfo.color;
+                    } else {
+                        if (is2DMode) return; 
+                        if (cell.stackLevel >= MAX_STACK_LEVEL) {
+                            cell.stackLevel = 1; // Cycle from 5 back to 1
+                        } else {
+                            cell.stackLevel++;
+                        }
+                    }
+                }
+            }
+            
+            if (originalStackLevel !== cell.stackLevel || originalColor !== cell.color) {
+                render3DGrid(currentGridState, gameGroup, numberGroup); 
+                saveState();
+            }
+        }
+
+        function handleBucketTool(startRow, startCol) {
+            const targetColor = currentGridState[startRow][startCol].color;
+            const targetStackLevel = currentGridState[startRow][startCol].stackLevel;
+            const fillColor = selectedColorInfo.color;
+
+            if (targetStackLevel === 0 || (targetColor === fillColor && targetStackLevel > 0)) {
+                return; // Don't fill empty space or same-colored space
+            }
+
+            const queue = [[startRow, startCol]];
+            const visited = new Set([`${startRow},${startCol}`]);
+            
+            while (queue.length > 0) {
+                const [r, c] = queue.shift();
+                currentGridState[r][c].color = fillColor;
+
+                const neighbors = [[r-1, c], [r+1, c], [r, c-1], [r, c+1]];
+                for (const [nr, nc] of neighbors) {
+                    if (nr >= 0 && nr < gridHeight && nc >= 0 && nc < gridWidth && !visited.has(`${nr},${nc}`)) {
+                        const neighborCell = currentGridState[nr][nc];
+                        if (neighborCell.stackLevel > 0 && neighborCell.color === targetColor) {
+                            visited.add(`${nr},${nc}`);
+                            queue.push([nr, nc]);
+                        }
+                    }
+                }
+            }
+
+            render3DGrid(currentGridState, gameGroup, numberGroup);
+            saveState();
+        }
+
+        function handleEyedropperTool(row, col) {
+            const cell = currentGridState[row][col];
+            if (cell.stackLevel === 0) return;
+
+            const pickedColor = cell.color;
+            const customColorPicker = getElementById('custom-color-picker');
+            const hexColor = '#' + pickedColor.toString(16).padStart(6, '0');
+            
+            customColorPicker.value = hexColor;
+            customColorPicker.dispatchEvent(new Event('input', { bubbles: true })); // Trigger change to update swatch
+        }
+
+        // --- Palette Management ---
+        function setupPalette() {
+            const paletteContainer = getElementById('palette-container');
+            paletteContainer.innerHTML = '';
+            blockTypes.forEach(blockType => {
+                if (blockType.id === 0) return;
+                const button = document.createElement('div');
+                button.className = 'palette-button';
+                button.dataset.id = blockType.id;
+                button.style.backgroundColor = '#' + blockType.color.toString(16).padStart(6, '0');
+                
+                // Make all colors draggable
+                button.draggable = true;
+                button.addEventListener('dragstart', handleDragStart);
+                button.addEventListener('dragover', handleDragOver);
+                button.addEventListener('dragleave', handleDragLeave);
+                button.addEventListener('drop', handleDrop);
+                button.addEventListener('dragend', handleDragEnd);
+                
+                const inner = document.createElement('div');
+                inner.className = 'palette-button-inner';
+                const nameSpan = document.createElement('span');
+                nameSpan.textContent = blockType.name;
+                inner.appendChild(nameSpan);
+                
+                button.addEventListener('dblclick', (e) => { e.stopPropagation(); editPaletteName(button, blockType, nameSpan); });
+                if (blockType.color > 0xaaaaaa) { inner.style.color = '#333'; inner.style.textShadow = 'none'; }
+                button.addEventListener('click', () => handlePaletteClick(blockType.id));
+                button.appendChild(inner);
+                paletteContainer.appendChild(button);
+            });
+            updatePaletteSelection();
+        }
+        
+        // --- Drag and Drop for Palette ---
+        function handleDragStart(e) {
+            draggedElement = e.target;
+            e.dataTransfer.effectAllowed = 'move';
+            e.dataTransfer.setData('text/plain', e.target.dataset.id);
+            setTimeout(() => {
+                e.target.classList.add('dragging');
+            }, 0);
+        }
+
+        function handleDragOver(e) {
+            e.preventDefault();
+            const target = e.target.closest('.palette-button');
+            if (target && target !== draggedElement) {
+                target.classList.add('drag-over');
+            }
+        }
+
+        function handleDragLeave(e) {
+            e.target.closest('.palette-button')?.classList.remove('drag-over');
+        }
+
+        function handleDrop(e) {
+            e.preventDefault();
+            const targetElement = e.target.closest('.palette-button');
+            if (!targetElement || targetElement === draggedElement) {
+                targetElement?.classList.remove('drag-over');
+                return;
+            }
+
+            const draggedId = parseInt(e.dataTransfer.getData('text/plain'), 10);
+            const targetId = parseInt(targetElement.dataset.id, 10);
+
+            const draggedIndex = blockTypes.findIndex(b => b.id === draggedId);
+            const targetIndex = blockTypes.findIndex(b => b.id === targetId);
+
+            if (draggedIndex > -1 && targetIndex > -1) {
+                // Swap elements in the array
+                [blockTypes[draggedIndex], blockTypes[targetIndex]] = [blockTypes[targetIndex], blockTypes[draggedIndex]];
+                
+                localStorage.setItem('customBlockTypes', JSON.stringify(blockTypes));
+                setupPalette(); // Re-render the palette with the new order
+            }
+            targetElement.classList.remove('drag-over');
+        }
+
+        function handleDragEnd(e) {
+            document.querySelectorAll('.palette-button').forEach(button => {
+                button.classList.remove('dragging');
+                button.classList.remove('drag-over');
+            });
+        }
+
+
+        function handlePaletteClick(id) {
+            const blockType = blockTypes.find(bt => bt.id === id);
+            if(blockType) {
+                selectedColorInfo = { type: 'palette', id: blockType.id, color: blockType.color };
+                const customColorPicker = getElementById('custom-color-picker');
+                const hexColor = '#' + blockType.color.toString(16).padStart(6, '0');
+                customColorPicker.value = hexColor;
+                getElementById('custom-color-swatch').style.backgroundColor = hexColor;
+                updatePaletteSelection();
+            }
+        }
+        
+        function handleCustomColorChange(event) {
+            const newColorHex = event.target.value;
+            getElementById('custom-color-swatch').style.backgroundColor = newColorHex;
+            selectedColorInfo = { type: 'custom', id: CUSTOM_PICKER_ID, color: parseInt(newColorHex.replace('#', '0x'), 16) };
+            updatePaletteSelection();
+        }
+        
+        function addOrUpdateCustomColor() {
+            const newColorHex = getElementById('custom-color-picker').value;
+            const newColor = parseInt(newColorHex.replace('#', '0x'), 16);
+            if (selectedColorInfo.type === 'palette' && selectedColorInfo.id >= CUSTOM_COLOR_ID_START) {
+                const blockToUpdate = blockTypes.find(bt => bt.id === selectedColorInfo.id);
+                if (blockToUpdate) { blockToUpdate.color = newColor; blockToUpdate.name = newColorHex.toUpperCase(); }
+            } else {
+                if (blockTypes.some(bt => bt.color === newColor)) {
+                    handlePaletteClick(blockTypes.find(bt => bt.color === newColor).id); return;
+                }
+                const newId = blockTypes.length > 0 ? Math.max(...blockTypes.map(bt => bt.id)) + 1 : CUSTOM_COLOR_ID_START;
+                blockTypes.push({ id: newId, name: newColorHex.toUpperCase(), color: newColor });
+            }
+            localStorage.setItem('customBlockTypes', JSON.stringify(blockTypes));
+            setupPalette();
+            handlePaletteClick(blockTypes.find(bt => bt.color === newColor).id);
+        }
+
+        async function deleteSelectedCustomColor() {
+            if (selectedColorInfo.type !== 'palette' || selectedColorInfo.id < CUSTOM_COLOR_ID_START) return;
+            const colorName = blockTypes.find(b => b.id === selectedColorInfo.id)?.name;
+            if (await showConfirmationModal(`色 ${colorName} をパレットから削除しますか？`)) {
+                 blockTypes = blockTypes.filter(bt => bt.id !== selectedColorInfo.id);
+                 localStorage.setItem('customBlockTypes', JSON.stringify(blockTypes));
+                 setupPalette();
+                 handlePaletteClick(1);
+            }
+        }
+        
+        function updatePaletteSelection() {
+            document.querySelectorAll('.palette-button').forEach(button => button.classList.remove('selected'));
+            getElementById('custom-color-swatch').classList.remove('selected');
+            if (selectedColorInfo.type === 'palette') {
+                const selectedButton = document.querySelector(`.palette-button[data-id='${selectedColorInfo.id}']`);
+                if (selectedButton) selectedButton.classList.add('selected');
+            } else if (selectedColorInfo.type === 'custom') {
+                getElementById('custom-color-swatch').classList.add('selected');
+            }
+            updateCustomColorButtons();
+        }
+
+        function updateCustomColorButtons() {
+            const addUpdateBtn = getElementById('add-update-palette-button');
+            const deleteBtn = getElementById('delete-color-button');
+            if (selectedColorInfo.type === 'palette' && selectedColorInfo.id >= CUSTOM_COLOR_ID_START) {
+                addUpdateBtn.innerHTML = '<i data-lucide="edit-3"></i>選択色を更新';
+                deleteBtn.disabled = false;
+            } else {
+                addUpdateBtn.innerHTML = '<i data-lucide="plus"></i>パレットに追加';
+                deleteBtn.disabled = true;
+            }
+            lucide.createIcons();
+        }
+
+        // --- Settings Update Functions ---
+        function updateGridSettings() {
+            const newWidth = parseInt(getElementById('grid-width-input').value, 10);
+            const newHeight = parseInt(getElementById('grid-height-input').value, 10);
+            if (isNaN(newWidth) || isNaN(newHeight) || newWidth < 1 || newHeight < 1 || newWidth > 100 || newHeight > 100) { return; }
+            const oldGrid = currentGridState;
+            const oldWidth = gridWidth; const oldHeight = gridHeight;
+            let rowOffset = 0; let colOffset = 0;
+            if (selectedAnchor.includes('middle')) { rowOffset = Math.floor((newHeight - oldHeight) / 2); } 
+            else if (selectedAnchor.includes('bottom')) { rowOffset = newHeight - oldHeight; }
+            if (selectedAnchor.includes('center')) { colOffset = Math.floor((newWidth - oldWidth) / 2); }
+            else if (selectedAnchor.includes('right')) { colOffset = newWidth - oldWidth; }
+            gridWidth = newWidth; gridHeight = newHeight;
+            const newGrid = Array(gridHeight).fill(null).map(() => Array(gridWidth).fill(null).map(() => ({ color: 0, stackLevel: 0 })));
+            for (let r = 0; r < oldHeight; r++) {
+                for (let c = 0; c < oldWidth; c++) {
+                    const destRow = r + rowOffset; const destCol = c + colOffset;
+                    if (destRow >= 0 && destRow < newHeight && destCol >= 0 && destCol < newWidth && oldGrid[r][c]) {
+                        newGrid[destRow][destCol] = oldGrid[r][c];
+                    }
+                }
+            }
+            currentGridState = newGrid;
+            rebuildScene();
+            saveState();
+        }
+
+        function updateCanvasSize() {
+            const newCanvasWidth = parseInt(getElementById('canvas-width-input').value, 10);
+            const newCanvasHeight = parseInt(getElementById('canvas-height-input').value, 10);
+            if (newCanvasWidth >= 200 && newCanvasHeight >= 200) {
+                gameCanvasContainer.style.width = `${newCanvasWidth}px`;
+                gameCanvasContainer.style.height = `${newCanvasHeight}px`;
+                setTimeout(() => {
+                    if (gameCamera && gameRenderer) {
+                        gameCamera.aspect = newCanvasWidth / newCanvasHeight;
+                        gameCamera.updateProjectionMatrix();
+                        gameRenderer.setSize(newCanvasWidth, newCanvasHeight);
+                    }
+                }, 0);
+            }
+        }
+
+        // --- View & Mode Toggles ---
+        function toggle2DMode(e) {
+            is2DMode = e.target.checked;
+            getElementById('stack-count-label').style.display = is2DMode ? 'none' : 'flex';
+            if (is2DMode) {
+                setTopView();
+                if(ambientLight) ambientLight.intensity = 1.0;
+                if(directionalLight) directionalLight.intensity = 0;
+            } else {
+                if(ambientLight) ambientLight.intensity = 0.7;
+                if(directionalLight) directionalLight.intensity = 0.9;
+            }
+            render3DGrid(currentGridState, gameGroup, numberGroup);
+        }
+
+        function setTopView() {
+            if (!gameCamera || !gameControls) return;
+            const distance = Math.max(gridWidth, gridHeight) * 1.5;
+            gameControls.reset();
+            gameCamera.position.set(0, distance, 0.01); 
+            gameControls.target.set(0, 0, 0);
+            gameControls.update();
+        }
+
+        // --- History (Undo/Redo) ---
+        function saveState() {
+            history = history.slice(0, historyIndex + 1);
+            history.push(JSON.stringify(currentGridState));
+            historyIndex++;
+            updateUndoRedoButtons();
+        }
+
+        function loadState(stateString) {
+            currentGridState = JSON.parse(stateString);
+            rebuildScene();
+            updateUndoRedoButtons();
+        }
+        
+        function undo() {
+            if(historyIndex > 0) {
+                historyIndex--;
+                loadState(history[historyIndex]);
+            }
+        }
+        
+        function redo() {
+            if(historyIndex < history.length - 1) {
+                historyIndex++;
+                loadState(history[historyIndex]);
+            }
+        }
+
+        function updateUndoRedoButtons() {
+            getElementById('undo-button').disabled = historyIndex <= 0;
+            getElementById('redo-button').disabled = historyIndex >= history.length - 1;
+        }
+
+        // --- Save/Load Canvas State ---
+        function saveCanvasState() {
+            const data = {
+                gridWidth: gridWidth, gridHeight: gridHeight,
+                gridState: currentGridState, palette: blockTypes
+            };
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], {type: 'application/json'}));
+            a.download = 'block_art.json';
+            a.click();
+            URL.revokeObjectURL(a.href);
+        }
+        
+        function loadCanvasState(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const data = JSON.parse(e.target.result);
+                    if (data.gridWidth && data.gridHeight && data.gridState && data.palette) {
+                        gridWidth = data.gridWidth; gridHeight = data.gridHeight;
+                        currentGridState = data.gridState; blockTypes = data.palette;
+                        getElementById('grid-width-input').value = gridWidth;
+                        getElementById('grid-height-input').value = gridHeight;
+                        setupPalette(); rebuildScene(); saveState();
+                    }
+                } catch(err) { console.error(err); }
+            };
+            reader.readAsText(file);
+            event.target.value = '';
+        }
+
+        function downloadFile(filename, content, mimeType) {
+            const blob = new Blob([content], { type: mimeType });
+            const link = document.createElement('a');
+            link.style.display = 'none';
+            document.body.appendChild(link);
+            link.href = URL.createObjectURL(blob);
+            link.download = filename;
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(link.href);
+        }
+
+        function exportAsPNG() {
+            // 元の状態を保存
+            const originalBackground = gameScene.background;
+            const gridVisible = gameGridHelper.visible;
+            const numbersVisible = numberGroup.visible;
+            const originalClearColor = new THREE.Color();
+            const originalClearAlpha = gameRenderer.getClearAlpha();
+            gameRenderer.getClearColor(originalClearColor);
+
+
+            // 背景透過でエクスポートするための準備
+            gameScene.background = null; // シーンの背景を一時的に削除
+            gameRenderer.setClearColor(0x000000, 0); // レンダラーのクリアカラーを透過に設定
+
+            gameGridHelper.visible = false;
+            numberGroup.visible = false;
+            
+            // シーンをレンダリング。
+            gameRenderer.render(gameScene, gameCamera);
+            
+            const dataURL = gameRenderer.domElement.toDataURL('image/png');
+            
+            // 元の状態に戻す
+            gameRenderer.setClearColor(originalClearColor, originalClearAlpha); // レンダラーのクリアカラーを元に戻す
+            gameScene.background = originalBackground;
+            gameGridHelper.visible = gridVisible;
+            numberGroup.visible = numbersVisible;
+            gameRenderer.render(gameScene, gameCamera); // キャンバスに元の表示を再レンダリング
+
+            // ダウンロードを実行
+            const link = document.createElement('a');
+            link.download = 'block_art.png';
+            link.href = dataURL;
+            link.click();
+        }
+
+        function exportAsSTL() {
+            const exporter = new THREE.STLExporter();
+            const result = exporter.parse(gameGroup, { binary: false });
+            downloadFile('block_art.stl', result, 'text/plain');
+        }
+        
+        function exportAsPLY() {
+            const exporter = new THREE.PLYExporter();
+            const exportScene = gameGroup.clone(true);
+            exportScene.traverse(child => {
+                if (child.isMesh) {
+                    const geometry = child.geometry.clone();
+                    const material = child.material;
+                    if (material && material.color) {
+                        const color = material.color;
+                        const count = geometry.attributes.position.count;
+                        const colors = new Float32Array(count * 3);
+                        for (let i = 0; i < count; i++) {
+                            colors[i * 3] = color.r;
+                            colors[i * 3 + 1] = color.g;
+                            colors[i * 3 + 2] = color.b;
+                        }
+                        geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+                        child.geometry = geometry;
+                    }
+                }
+            });
+
+            const result = exporter.parse(exportScene, { binary: false });
+            downloadFile('block_art.ply', result, 'application/octet-stream');
+        }
+
+        async function exportAsOBJ() {
+            const mtlFileName = 'block_art.mtl';
+            const objFileName = 'block_art.obj';
+            const materials = {};
+            let materialCounter = 0;
+            let mtlContent = `# 2.5D Builder MTL File\n`;
+
+            const exportGroup = gameGroup.clone(true);
+
+            exportGroup.traverse(child => {
+                if (child.isMesh) {
+                    const material = child.material;
+                    if (!materials[material.uuid]) {
+                        const materialName = `Material_${materialCounter++}`;
+                        materials[material.uuid] = { name: materialName, material: material };
+                        
+                        const color = material.color;
+                        mtlContent += `newmtl ${materialName}\n`;
+                        mtlContent += `Ns 10.0000\n`;
+                        mtlContent += `Ka 1.000000 1.000000 1.000000\n`;
+                        mtlContent += `Kd ${color.r.toFixed(6)} ${color.g.toFixed(6)} ${color.b.toFixed(6)}\n`;
+                        mtlContent += `Ks 0.500000 0.500000 0.500000\n`;
+                        mtlContent += `d 1.0\n`;
+                        mtlContent += `illum 2\n\n`;
+                        
+                        child.material.name = materialName;
+                    } else {
+                         child.material.name = materials[material.uuid].name;
+                    }
+                }
+            });
+
+            const exporter = new THREE.OBJExporter();
+            let objContent = exporter.parse(exportGroup);
+            objContent = `mtllib ${mtlFileName}\n` + objContent;
+            
+            downloadFile(mtlFileName, mtlContent, 'text/plain');
+            
+            await new Promise(resolve => setTimeout(resolve, 500));
+            downloadFile(objFileName, objContent, 'text/plain');
+        }
+
+
+        // --- Utility Functions ---
+        function clearGroup(group) { while (group.children.length > 0) { group.remove(group.children[0]); } }
+        function createNumberSprite(text) {
+            const canvas = document.createElement('canvas'); const context = canvas.getContext('2d');
+            const size = 128; canvas.width = size; canvas.height = size;
+            context.font = `bold ${size/2}px Arial`; context.textAlign = 'center'; context.textBaseline = 'middle';
+            context.strokeStyle = 'black'; context.lineWidth = 8;
+            context.strokeText(text, size / 2, size / 2 + 5);
+            context.fillStyle = 'white'; context.fillText(text, size / 2, size / 2 + 5);
+            const texture = new THREE.CanvasTexture(canvas);
+            const spriteMaterial = new THREE.SpriteMaterial({ map: texture, transparent: true });
+            const sprite = new THREE.Sprite(spriteMaterial);
+            sprite.scale.set(0.5, 0.5, 1); return sprite;
+        }
+        function createRectangularGridHelper(width, height) {
+            const sizeX = width * CELL_SIZE; const sizeZ = height * CELL_SIZE; const vertices = [];
+            const halfSizeX = sizeX / 2; const halfSizeZ = sizeZ / 2;
+            for (let i = 0; i <= width; i++) {
+                const x = (i * CELL_SIZE) - halfSizeX; vertices.push(x, 0, -halfSizeZ, x, 0, halfSizeZ);
+            }
+            for (let i = 0; i <= height; i++) {
+                const z = (i * CELL_SIZE) - halfSizeZ; vertices.push(-halfSizeX, 0, z, halfSizeX, 0, z);
+            }
+            const geometry = new THREE.BufferGeometry();
+            geometry.setAttribute( 'position', new THREE.Float32BufferAttribute( vertices, 3 ) );
+            return new THREE.LineSegments( geometry, new THREE.LineBasicMaterial( { color: 0x888888 } ) );
+        }
+        function handleCustomColorSwatchClick(){
+            selectedColorInfo = { type: 'custom', id: CUSTOM_PICKER_ID, color: parseInt(getElementById('custom-color-picker').value.replace('#', '0x'), 16) };
+            updatePaletteSelection();
+        }
+        function editPaletteName(button, blockType, nameSpan) {
+            if (getElementById('palette-container').querySelector('input')) return;
+            const input = document.createElement('input');
+            input.type = 'text'; input.value = blockType.name; input.className = 'palette-name-input';
+            nameSpan.replaceWith(input); input.focus(); input.select();
+            const finishEdit = () => {
+                const newName = input.value.trim();
+                if (newName && newName !== blockType.name) {
+                    blockType.name = newName; localStorage.setItem('customBlockTypes', JSON.stringify(blockTypes));
+                }
+                setupPalette();
+            };
+            input.addEventListener('blur', finishEdit, { once: true });
+            input.addEventListener('keydown', (e) => { if (e.key === 'Enter') input.blur(); else if (e.key === 'Escape') setupPalette(); });
+        }
+        
+        function showConfirmationModal(message) {
+            return new Promise(resolve => {
+                const overlay = getElementById('modal-overlay');
+                const msgEl = getElementById('modal-message');
+                const confirmBtn = getElementById('modal-confirm');
+                const cancelBtn = getElementById('modal-cancel');
+                
+                msgEl.textContent = message;
+                overlay.style.display = 'flex';
+                
+                const onConfirm = () => {
+                    overlay.style.display = 'none';
+                    resolve(true);
+                    cleanup();
+                };
+                
+                const onCancel = () => {
+                    overlay.style.display = 'none';
+                    resolve(false);
+                    cleanup();
+                };
+                
+                const cleanup = () => {
+                    confirmBtn.removeEventListener('click', onConfirm);
+                    cancelBtn.removeEventListener('click', onCancel);
+                };
+                
+                confirmBtn.addEventListener('click', onConfirm);
+                cancelBtn.addEventListener('click', onCancel);
+            });
+        }
+        
+        // --- Animation Loop ---
+        function animate() {
+            requestAnimationFrame(animate);
+            if (gameControls) gameControls.update();
+            if (gameRenderer && gameScene && gameCamera) gameRenderer.render(gameScene, gameCamera);
+        }
+
+        // --- Start ---
+        document.addEventListener('DOMContentLoaded', init);
+    </script>
+</body>
+</html>
